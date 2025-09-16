@@ -1,4 +1,4 @@
-import { Song, Playlist, Artist } from '../types';
+import { Artist, Playlist, Song } from "../types";
 
 export const recentPlaylists: Playlist[] = [
   {

@@ -3,8 +3,6 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from '@expo/vector-icons/Ionicons';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
-import LibraryScreen from '../screens/LibraryScreen';
-import PremiumScreen from '../screens/PremiumScreen';
 
 export type RootTabParamList = {
   Home: undefined;
@@ -57,8 +55,6 @@ const BottomTabNavigator: React.FC = () => {
     >
       <Tab.Screen name="Home" component={HomeScreen} options={{ title: 'Home' }} />
       <Tab.Screen name="Search" component={SearchScreen} options={{ title: 'Search' }} />
-      <Tab.Screen name="Library" component={LibraryScreen} options={{ title: 'Library' }} />
-      <Tab.Screen name="Premium" component={PremiumScreen} options={{ title: 'Premium' }} />
     </Tab.Navigator>
   );
 };

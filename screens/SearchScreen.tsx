@@ -4,15 +4,25 @@ import Icon from '@expo/vector-icons/Ionicons';
 import { songs } from '../data/mockData';
 import SongCard from '../components/SongCard';
 import { usePlayer } from '../context/PlayerContext';
+import { Song } from '../types';
 
 const SearchScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const { playSong } = usePlayer();
+  const { playSong, currentSong, isPlaying, togglePlayPause } = usePlayer();
 
   const filteredSongs = songs.filter(song =>
     song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     song.artist.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  function handleSongPress(song: Song) {
+    const isCurrent = currentSong && currentSong.id === song.id;
+    if (isCurrent) {
+      togglePlayPause();
+    } else {
+      playSong(song);
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -32,7 +42,7 @@ const SearchScreen: React.FC = () => {
           data={filteredSongs}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <SongCard song={item} onPress={() => playSong(item)} />
+            <SongCard song={item} onPress={() => handleSongPress(item)} />
           )}
           contentContainerStyle={styles.listContent}
         />

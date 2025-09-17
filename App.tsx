@@ -16,6 +16,8 @@ export interface Track {
   title: string;
   artist: string;
   duration: string;
+  image: string;
+  url: string;
 }
 
 const Stack = createNativeStackNavigator<RootStackParamList>();

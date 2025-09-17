@@ -1,27 +1,19 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Image, StyleSheet } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, Track } from '../App';
 import { usePlayer } from '../context/PlayerContext';
-import { useEffect, useState } from 'react';
+import { songs } from '../data/mockData';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
-const [tracks, setTracks] = useState<Track[]>([]);
-
-useEffect(() => {
-  // Simulate API call
-  setTimeout(() => {
-    setTracks([
-      { id: '1', title: 'Ocean Breeze', artist: 'Studio One', duration: '3:12' },
-      { id: '2', title: 'Midnight Drive', artist: 'The Explorers', duration: '4:02' },
-      { id: '3', title: 'City Lights', artist: 'Synth Wave', duration: '2:58' },
-    ]);
-  }, 500);
-}, []);
-
 export default function HomeScreen({ navigation }: Props) {
   const { playSong, currentSong, isPlaying, togglePlayPause } = usePlayer();
+  const [tracks, setTracks] = useState<Track[]>([]);
+
+  useEffect(() => {
+    setTracks(songs);
+  }, []);
 
   function handleSongPress(track: Track) {
     const isCurrent =
@@ -39,9 +31,10 @@ export default function HomeScreen({ navigation }: Props) {
         artist: track.artist,
         album: '',
         duration: track.duration,
-        image: require('../assets/cover-placeholder.png'),
-        url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+        image: track.image,
+        url: track.url,
       });
+      
     }
   }
 

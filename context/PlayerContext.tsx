@@ -1,6 +1,15 @@
-import React, { createContext, useContext, useState, ReactNode, useRef, useEffect } from 'react';
-import { Audio } from 'expo-av';
-import { Song } from '../types';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  ReactNode,
+  useEffect,
+} from "react";
+import { Audio } from "expo-av";
+import { Song } from "../types";
+import { songs } from "../data/mockData";
+import { Platform } from "react-native";
+import { songAssets } from "../contants";
 
 interface PlayerContextType {
   currentSong: Song | null;
@@ -20,12 +29,10 @@ const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 export const usePlayer = () => {
   const context = useContext(PlayerContext);
   if (!context) {
-    throw new Error('usePlayer must be used within a PlayerProvider');
+    throw new Error("usePlayer must be used within a PlayerProvider");
   }
-// ...existing code...
-return context;
-// ...existing code...
-}
+  return context;
+};
 
 interface PlayerProviderProps {
   children: ReactNode;
@@ -34,7 +41,11 @@ interface PlayerProviderProps {
 export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackInstance, setPlaybackInstance] = useState<Audio.Sound | null>(null);
+  const [isCurrentSongPlayingFinished, setisCurrentSongPlayingFinished] =
+    useState(false);
+  const [playbackInstance, setPlaybackInstance] = useState<Audio.Sound | null>(
+    null
+  );
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
 
@@ -47,15 +58,39 @@ export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
     };
   }, [playbackInstance]);
 
+  useEffect(() => {
+    if (isCurrentSongPlayingFinished) {
+      setTimeout(() => {
+        playNext();
+      }, 300);
+    }
+  }, [isCurrentSongPlayingFinished]);
+
   const playSong = async (song: Song) => {
-    // Stop previous audio
+    setisCurrentSongPlayingFinished(false);
     if (playbackInstance) {
       await playbackInstance.unloadAsync();
       setPlaybackInstance(null);
     }
-    setCurrentSong(song);
+    let selectedSong = song;
+    if (selectedSong) {
+      setCurrentSong(selectedSong);
+    }
+
+    let source;
+    if (Platform.OS === "web") {
+      // Use remote URL for web
+      source = { uri: `/assets/songs/Favorites/${selectedSong.url}` };
+    } else {
+      // Use require for native
+      source =
+        selectedSong.url && songAssets[selectedSong.url]
+          ? songAssets[selectedSong.url]
+          : songAssets["Chikku-Bukku-Rayile.mp3"];
+    }
+
     const { sound } = await Audio.Sound.createAsync(
-      { uri: song.url },
+      source,
       { shouldPlay: true },
       onPlaybackStatusUpdate
     );
@@ -68,6 +103,10 @@ export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
       setPosition(status.positionMillis);
       setDuration(status.durationMillis || 0);
       setIsPlaying(status.isPlaying);
+      // Only play next if not looping and song finished naturally
+      if (status.didJustFinish && !status.isLooping) {
+        setisCurrentSongPlayingFinished(true);
+      }
     }
   };
   const seekTo = async (ms: number) => {
@@ -88,13 +127,24 @@ export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
   };
 
   const playNext = () => {
-    // Implement next song logic
-    console.log('Playing next song');
+    console.log("Playing next song...", currentSong);
+    if (!currentSong) return;
+    const idx = songs.findIndex((s: Song) => s.id === currentSong.id);
+    if (idx === -1) return;
+    if (idx < songs.length - 1) {
+      playSong(songs[idx + 1]);
+    } else {
+      setIsPlaying(false); // Stop playback at the end
+      setCurrentSong(null); // Clear currentSong when finished
+    }
   };
 
   const playPrevious = () => {
-    // Implement previous song logic
-    console.log('Playing previous song');
+    if (!currentSong) return;
+    const idx = songs.findIndex((s: Song) => s.id === currentSong.id);
+    if (idx === -1) return;
+    const prevIdx = (idx - 1 + songs.length) % songs.length;
+    playSong(songs[prevIdx]);
   };
 
   return (
@@ -115,4 +165,4 @@ export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
       {children}
     </PlayerContext.Provider>
   );
-}
+};

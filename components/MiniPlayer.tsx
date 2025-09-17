@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { usePlayer } from '../context/PlayerContext';
 import Icon from '@expo/vector-icons/Ionicons';
+import { ScrollView } from 'react-native';
 import PlayerControls from './PlayerControls';
 
 const MiniPlayer: React.FC = () => {
@@ -46,25 +47,40 @@ const MiniPlayer: React.FC = () => {
         <View style={styles.fullPlayerContainer}>
           <View style={styles.header}>
             <TouchableOpacity 
-              onPress={() => setIsPlayerExpanded(false)}
+              onPress={() => {
+                console.log('Chevron down pressed, minimizing modal');
+                setIsPlayerExpanded(false);
+              }}
               style={styles.closeButton}
             >
               <Icon name="chevron-down" size={30} color="white" />
             </TouchableOpacity>
-            <Text style={styles.playerTitle}>Now Playing</Text>
+            <Text style={styles.playerTitle}>Rama song is playing now...</Text>
+            <TouchableOpacity style={{ padding: 8 }}>
+              <Icon name="heart-outline" size={24} color="pink" />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.menuButton}>
               <Icon name="ellipsis-horizontal" size={24} color="white" />
             </TouchableOpacity>
           </View>
-
-          <View style={styles.albumArtContainer}>
-            <Image 
-              source={{ uri: currentSong.image }} 
-              style={styles.albumArt} 
-            />
-          </View>
-
-          <PlayerControls isExpanded={true} />
+          <ScrollView
+            style={{ flex: 1 }}
+            scrollEventThrottle={16}
+            onScroll={event => {
+              const y = event.nativeEvent.contentOffset.y;
+              if (y > 60) {
+                setIsPlayerExpanded(false);
+              }
+            }}
+          >
+            <View style={styles.albumArtContainer}>
+              <Image 
+                source={{ uri: currentSong.image }} 
+                style={styles.albumArt} 
+              />
+            </View>
+            <PlayerControls isExpanded={true} />
+          </ScrollView>
         </View>
       </Modal>
     </>
@@ -113,16 +129,17 @@ const styles = StyleSheet.create({
     backgroundColor: '#121212',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#282828',
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  paddingHorizontal: 16,
+  paddingVertical: 20,
+  borderBottomWidth: 1,
+  borderBottomColor: '#282828',
+  marginTop: 40,
   },
   closeButton: {
-    padding: 8,
+  padding: 8,
   },
   playerTitle: {
     color: 'white',

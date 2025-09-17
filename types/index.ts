@@ -12,7 +12,7 @@ export interface Playlist {
   id: string;
   title: string;
   description: string;
-  image: string;
+  image?: string;
   songs: Song[];
 }
 

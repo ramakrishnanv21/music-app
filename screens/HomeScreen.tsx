@@ -3,7 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, Image, StyleSheet } from 'react
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList, Track } from '../App';
 import { usePlayer } from '../context/PlayerContext';
-import { songs } from '../data/mockData';
+import { songs } from '../data/songs';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 

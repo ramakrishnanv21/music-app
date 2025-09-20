@@ -1,15 +1,24 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  ReactNode,
-  useEffect,
-} from "react";
+import React, { createContext, useState, ReactNode, useEffect, useRef, useContext } from "react";
 import { Audio } from "expo-av";
 import { Song } from "../types";
-import { songs } from "../data/mockData";
+import { songs } from "../data";
 import { Platform } from "react-native";
 import { songAssets } from "../contants";
+
+// Initialize audio mode
+async function setupAudio() {
+  await Audio.setAudioModeAsync({
+    allowsRecordingIOS: false,
+    playsInSilentModeIOS: true,
+    playThroughEarpieceAndroid: false,
+    staysActiveInBackground: true,
+    shouldDuckAndroid: true,
+    // Remove duplicate playThroughEarpieceAndroid
+    // Use numeric values for interruption modes for better compatibility
+    interruptionModeIOS: 1, // INTERRUPTION_MODE_IOS_DO_NOT_MIX
+    interruptionModeAndroid: 2, // INTERRUPTION_MODE_ANDROID_DUCK_OTHERS
+  });
+}
 
 interface PlayerContextType {
   currentSong: Song | null;
@@ -41,13 +50,23 @@ interface PlayerProviderProps {
 export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isCurrentSongPlayingFinished, setisCurrentSongPlayingFinished] =
-    useState(false);
-  const [playbackInstance, setPlaybackInstance] = useState<Audio.Sound | null>(
-    null
-  );
+  const [isCurrentSongPlayingFinished, setIsCurrentSongPlayingFinished] = useState(false);
+  const [playbackInstance, setPlaybackInstance] = useState<Audio.Sound | null>(null);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
+  const isMounted = useRef(true);
+
+  // Initialize audio mode on mount
+  useEffect(() => {
+    setupAudio();
+    return () => {
+      isMounted.current = false;
+      if (playbackInstance) {
+        playbackInstance.unloadAsync();
+      }
+    };
+  }, []);
 
   // Cleanup audio on unmount
   useEffect(() => {
@@ -59,92 +78,192 @@ export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
   }, [playbackInstance]);
 
   useEffect(() => {
+    console.log('isCurrentSongPlayingFinished changed:', isCurrentSongPlayingFinished);
     if (isCurrentSongPlayingFinished) {
-      setTimeout(() => {
-        playNext();
-      }, 300);
+      console.log('Playing next song...');
+      const playNextSong = async () => {
+        try {
+          await playNext();
+          // Reset the flag after successfully playing the next song
+          setIsCurrentSongPlayingFinished(false);
+        } catch (error) {
+          console.error('Error playing next song:', error);
+        }
+      };
+      
+      // Small delay to ensure state updates are processed
+      const timer = setTimeout(playNextSong, 100);
+      return () => clearTimeout(timer);
     }
   }, [isCurrentSongPlayingFinished]);
 
-  const playSong = async (song: Song) => {
-    setisCurrentSongPlayingFinished(false);
-    if (playbackInstance) {
-      await playbackInstance.unloadAsync();
-      setPlaybackInstance(null);
-    }
-    let selectedSong = song;
-    if (selectedSong) {
-      setCurrentSong(selectedSong);
-    }
+  const loadAndPlaySong = async (song: Song) => {
+    setIsCurrentSongPlayingFinished(false);
 
-    let source;
-    if (Platform.OS === "web") {
-      // Use remote URL for web
-      source = { uri: `/assets/songs/Favorites/${selectedSong.url}` };
-    } else {
-      // Use require for native
-      source =
-        selectedSong.url && songAssets[selectedSong.url]
-          ? songAssets[selectedSong.url]
+    if (!song) return;
+    
+    setIsLoading(true);
+    setCurrentSong(song);
+
+    try {
+      // Unload previous sound if exists
+      if (playbackInstance) {
+        await playbackInstance.unloadAsync();
+      }
+
+      // Determine the source based on platform
+      let source;
+      if (Platform.OS === "web") {
+        source = { uri: `/assets/songs/Favorites/${song.url}` };
+      } else {
+        source = song.url && songAssets[song.url] 
+          ? songAssets[song.url] 
           : songAssets["Chikku-Bukku-Rayile.mp3"];
-    }
+      }
 
-    const { sound } = await Audio.Sound.createAsync(
-      source,
-      { shouldPlay: true },
-      onPlaybackStatusUpdate
-    );
-    setPlaybackInstance(sound);
-    setIsPlaying(true);
-  };
+      // Create and play the new sound
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        source,
+        { shouldPlay: true },
+        onPlaybackStatusUpdate
+      );
 
-  const onPlaybackStatusUpdate = (status: any) => {
-    if (status.isLoaded) {
-      setPosition(status.positionMillis);
-      setDuration(status.durationMillis || 0);
-      setIsPlaying(status.isPlaying);
-      // Only play next if not looping and song finished naturally
-      if (status.didJustFinish && !status.isLooping) {
-        setisCurrentSongPlayingFinished(true);
+      if (isMounted.current) {
+        setPlaybackInstance(newSound);
+        setIsPlaying(true);
+      }
+    } catch (error) {
+      console.error('Error loading sound:', error);
+      if (isMounted.current) {
+        setIsPlaying(false);
+      }
+    } finally {
+      if (isMounted.current) {
+        setIsLoading(false);
       }
     }
   };
-  const seekTo = async (ms: number) => {
-    if (playbackInstance) {
-      await playbackInstance.setPositionAsync(ms);
+
+  const onPlaybackStatusUpdate = (status: any) => {
+    if (!isMounted.current || isSeekingRef.current) return;
+    
+    if (status.isLoaded) {
+      setPosition(status.positionMillis);
+      setDuration(status.durationMillis || 0);
+      
+      if (status.isPlaying !== isPlaying) {
+        setIsPlaying(!!status.isPlaying);
+      }
+      
+      if (status.didJustFinish && !status.isLooping) {
+        console.log('Song finished, setting isCurrentSongPlayingFinished to true');
+        setIsCurrentSongPlayingFinished(true);
+      }
     }
+  };
+
+  // Track if user is currently seeking
+  const isSeekingRef = useRef(false);
+  const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const seekTo = async (ms: number) => {
+    if (!playbackInstance) return;
+    
+    // Update the position immediately for smooth UI feedback
+    setPosition(ms);
+    
+    // Clear any pending seek operations
+    if (seekTimeoutRef.current) {
+      clearTimeout(seekTimeoutRef.current);
+    }
+    
+    // Debounce the actual seek operation for better performance
+    isSeekingRef.current = true;
+    
+    seekTimeoutRef.current = setTimeout(async () => {
+      try {
+        await playbackInstance.setPositionAsync(ms);
+        // Small delay to ensure the position is updated before allowing new seeks
+        setTimeout(() => {
+          isSeekingRef.current = false;
+        }, 100);
+      } catch (error) {
+        console.error('Error seeking:', error);
+        isSeekingRef.current = false;
+      }
+    }, 100); // 100ms debounce time
   };
 
   const togglePlayPause = async () => {
-    if (!playbackInstance) return;
-    if (isPlaying) {
-      await playbackInstance.pauseAsync();
-      setIsPlaying(false);
-    } else {
-      await playbackInstance.playAsync();
-      setIsPlaying(true);
+    if (!playbackInstance) {
+      if (currentSong) {
+        await loadAndPlaySong(currentSong);
+      } else if (songs.length > 0) {
+        await loadAndPlaySong(songs[0]);
+      }
+      return;
+    }
+
+    try {
+      if (isPlaying) {
+        await playbackInstance.pauseAsync();
+      } else {
+        await playbackInstance.playAsync();
+      }
+    } catch (error) {
+      console.error('Error toggling play/pause:', error);
     }
   };
 
-  const playNext = () => {
-    console.log("Playing next song...", currentSong);
-    if (!currentSong) return;
-    const idx = songs.findIndex((s: Song) => s.id === currentSong.id);
-    if (idx === -1) return;
-    if (idx < songs.length - 1) {
-      playSong(songs[idx + 1]);
+  const playNext = async () => {
+    console.log('playNext called, currentSong:', currentSong?.title);
+    
+    if (!currentSong) {
+      if (songs.length > 0) {
+        await loadAndPlaySong(songs[0]);
+      }
+      return;
+    }
+
+    const currentIndex = songs.findIndex((s: Song) => s.id === currentSong.id);
+    if (currentIndex === -1) {
+      console.log('Current song not found in songs list');
+      return;
+    }
+    
+    const nextIndex = (currentIndex + 1) % songs.length;
+    console.log(`Playing next song at index ${nextIndex}: ${songs[nextIndex]?.title}`);
+    
+    if (songs[nextIndex]) {
+      await loadAndPlaySong(songs[nextIndex]);
     } else {
-      setIsPlaying(false); // Stop playback at the end
-      setCurrentSong(null); // Clear currentSong when finished
+      console.error('No next song available');
     }
   };
 
-  const playPrevious = () => {
-    if (!currentSong) return;
-    const idx = songs.findIndex((s: Song) => s.id === currentSong.id);
-    if (idx === -1) return;
-    const prevIdx = (idx - 1 + songs.length) % songs.length;
-    playSong(songs[prevIdx]);
+  const playPrevious = async () => {
+    if (!currentSong) {
+      if (songs.length > 0) {
+        await loadAndPlaySong(songs[songs.length - 1]);
+      }
+      return;
+    }
+
+    const currentIndex = songs.findIndex((s: Song) => s.id === currentSong.id);
+    if (currentIndex === -1) return;
+    
+    // If we're more than 3 seconds into the song, restart it
+    if (position > 3000) {
+      if (playbackInstance) {
+        await playbackInstance.setPositionAsync(0);
+        await playbackInstance.playAsync();
+      }
+      return;
+    }
+    
+    // Otherwise, go to previous song
+    const prevIndex = (currentIndex - 1 + songs.length) % songs.length;
+    await loadAndPlaySong(songs[prevIndex]);
   };
 
   return (
@@ -152,7 +271,7 @@ export const PlayerProvider: React.FC<PlayerProviderProps> = ({ children }) => {
       value={{
         currentSong,
         isPlaying,
-        playSong,
+        playSong: loadAndPlaySong,
         togglePlayPause,
         playNext,
         playPrevious,
